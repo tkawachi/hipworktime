@@ -1,11 +1,11 @@
 #!/usr/bin/env ruby
 # encoding: utf-8
 
-require 'date'
+$: << File.join(File.dirname(__FILE__), "../lib")
+
 require 'pathname'
 require 'pit'
-require 'hipchat-api'
-require 'active_support/time'
+require 'hip_work_time'
 
 $:.unshift((Pathname.new(__FILE__).dirname + "../lib").to_s)
 
@@ -16,227 +16,42 @@ CONFIG = {
     date_break_hour: 6, # 24時を越えて仕事をすることがありそうなので、一日の区切りをこの時間にする。
 }
 
-class Message
-  # @param [Hash] message_hash
-  def initialize(message_hash)
-    @datetime = DateTime.parse(message_hash['date'])
-    @message = message_hash['message']
-    @from = message_hash['from']
-  end
-
-  # @param [Date] date
-  def for_date?(date)
-    (@datetime - CONFIG[:date_break_hour].hours).to_date == date
-  end
-
-  def start?
-    @message.strip == CONFIG[:start_keyword]
-  end
-
-  def end?
-    @message.strip == CONFIG[:end_keyword]
-  end
-
-  def to_s
-    "#{@datetime.to_s} <#{@from['name']}> #@message"
-  end
-
-  attr_reader :datetime, :message, :from
-end
-
-class TimeRange
-  def initialize(start_datetime = nil, end_datetime = nil)
-    @start_datetime = start_datetime
-    @end_datetime = end_datetime
-  end
-
-  def to_s
-    "#{@start_datetime} ~ #{@end_datetime}"
-  end
-  attr_accessor :start_datetime, :end_datetime
-end
-
-class WorkTime
-  def initialize(target_date)
-    @target_date = target_date
-    @messages = []
-  end
-
-  # @param [Message] message
-  def add_message(message)
-    # Filter by @target_date
-    if message.for_date? @target_date
-      @messages << message
-    end
-  end
-
-  def add_messages(messages)
-    messages.each { |message| add_message message }
-  end
-
-  def work_times
-    is_working = false
-    result = []
-    time_range = nil
-    last_message = nil
-    messages = @messages.sort { |a, b| a.datetime <=> b.datetime }
-    messages.each do |message|
-      if is_working
-        if message.end?
-          time_range.end_datetime = message.datetime
-          result << time_range
-          time_range = nil
-          is_working = false
-        elsif message.start?
-          # 二度スタートした。
-          # 直前の message からこのメッセージまでが 1h よりながければこれを休憩時間とみなす
-          if last_message && (message.datetime.to_time - last_message.datetime.to_time > 1.hour)
-            time_range.end_datetime = last_message.datetime
-            result << time_range
-            time_range = TimeRange.new(message.datetime)
-          end
-        end
-      else
-        if message.start?
-          time_range = TimeRange.new(message.datetime)
-          is_working = true
-        elsif message.end?
-          # start なしで end が着た。
-          # result の最後の end_datetime もしくは日の始まりから数えて、最初の message を start とみなす。
-          # そのようなメッセージがなければ無視する。
-          if result.size > 0
-            from_dt = result.last.end_datetime
-          else
-            from_dt = @target_date + CONFIG[:date_break_hour].hours
-          end
-          first_message = messages.select { |m| m.datetime > from_dt }.first
-          if first_message
-            result << TimeRange.new(first_message.datetime, message.datetime)
-          end
-        end
-      end
-
-      last_message = message
-    end
-
-    if is_working
-      # 最後に end し忘れた。
-      # 最後の message を end とみなす。
-      if messages.last.datetime > time_range.start_datetime
-        time_range.end_datetime = messages.last.datetime
-        result << time_range
-        time_range = nil
-        is_working = false
-      end
-    end
-
-    result
-  end
-
-  def to_s
-    @messages.to_s
-  end
-
-  attr_accessor :start_datetime, :end_datetime, :break_hours
-end
-
-class CachedApiAccess
-  class << self
-
-    def api
-     @api ||= HipChat::API.new(config[:api_key])
-    end
-
-    def get_config
-      ENV['EDITOR'] = 'vi' unless ENV['EDITOR']
-      Pit.get(
-          'hipworktime',
-          require: {
-              api_key: 'HipChat admin API key to retrieve chat history. See https://www.hipchat.com/docs/api/auth',
-              room_id: 'HipChat Room ID. Pick one from https://www.hipchat.com/rooms/ids',
-              email: 'mail@example.com',
-          }
-      )
-    end
-
-    def config
-      @config ||= get_config
-    end
-
-    def get_user_id
-      api = HipChat::API.new(config[:api_key])
-      resp = api.users_show(config[:email])
-      resp.parsed_response['user']['user_id']
-    end
-
-    def user_id
-      @user_id ||= get_user_id
-    end
-
-    # @param [Date] date
-    # @return [Hash] Messages for given date
-    def messages(date)
-      @messages ||= {}
-      if @messages.has_key? date
-        @messages[date]
-      else
-        resp = api.rooms_history(config[:room_id], date.to_s, CONFIG[:timezone])
-        if resp.code != 200
-          raise RuntimeError.new("Getting history failed (code: #{resp.code}, #{resp.body})")
-        end
-        messages = resp.parsed_response['messages'].select do |message|
-          message['from']['user_id'] == user_id
-        end
-        messages = messages.map { |hash| Message.new(hash) }
-        @messages[date] = messages
-        messages
-      end
-    end
-  end
-end
-
-class HipWorkTime
-  def usage
-    <<-EOS
+def usage
+  <<-EOS
 Usage: hipworktime year month [day]
 
   e.g. $ hipworktime 2012 8  # will print work time of Aug. 2012
 
   Configuration are written under ~/.pit/
 
-    EOS
-  end
-
-  def work_time_for_date(date)
-    work_time = WorkTime.new(date)
-    [date, date + 1].each do |d| # 日付またいで仕事することがあるので翌日分も参照
-      work_time.add_messages(CachedApiAccess.messages(d))
-    end
-    work_time
-  end
-
-  def main
-    if ARGV.length < 2
-      puts usage
-      exit! 1
-    end
-    year, month, day = ARGV.map(&:to_i)
-
-    if day
-      date = Date.new(year, month, day)
-      puts work_time_for_date(date).work_times
-    else
-      date = Date.new(year, month)
-      while date.month == month
-        puts work_time_for_date(date)
-        date += 1
-      end
-    end
-  end
-
+  EOS
 end
 
-
-if __FILE__ == $0
-  HipWorkTime.new.main
+def work_time_for_date(date)
+  work_time = HipWorkTime::WorkTime.new(date)
+  [date, date + 1].each do |d| # 日付またいで仕事することがあるので翌日分も参照
+    work_time.add_messages(HipWorkTime::CachedApiAccess.messages(d))
+  end
+  work_time
 end
+
+def main
+  if ARGV.length < 2
+    puts usage
+    exit! 1
+  end
+  year, month, day = ARGV.map(&:to_i)
+
+  if day
+    date = Date.new(year, month, day)
+    puts work_time_for_date(date).work_times
+  else
+    date = Date.new(year, month)
+    while date.month == month
+      puts work_time_for_date(date)
+      date += 1
+    end
+  end
+end
+
+main
