@@ -9,13 +9,6 @@ require 'hip_work_time'
 
 $:.unshift((Pathname.new(__FILE__).dirname + "../lib").to_s)
 
-CONFIG = {
-    start_keyword: 'in',
-    end_keyword: 'out',
-    timezone: 'JST',
-    date_break_hour: 6, # 24時を越えて仕事をすることがありそうなので、一日の区切りをこの時間にする。
-}
-
 def usage
   <<-EOS
 Usage: hipworktime year month [day]
