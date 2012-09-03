@@ -3,8 +3,12 @@ module HipWorkTime
   class CachedApiAccess
     class << self
 
-      def api
-        @api ||= HipChat::API.new(config[:api_key])
+      def api(options = {})
+        @api ||= begin
+          api = HipChat::API.new(config[:api_key])
+          api.set_timeout(options[:timeout] || 10)
+          api
+        end
       end
 
       def get_config
