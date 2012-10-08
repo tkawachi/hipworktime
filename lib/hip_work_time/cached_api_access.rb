@@ -1,3 +1,6 @@
+require 'json'
+require_relative 'disk_cache'
+
 module HipWorkTime
 
   class CachedApiAccess
@@ -44,15 +47,31 @@ module HipWorkTime
         if @messages.has_key? date
           @messages[date]
         else
+          messages = get_json_message(date).select do |message|
+            message['from']['user_id'] == user_id
+          end
+          @messages[date] = messages.map { |hash| Message.new(hash) }
+        end
+      end
+
+      private
+      def disk_cache
+        @disk_cache ||= DiskCache.new
+      end
+
+      def get_json_message(date)
+        cache_key = date.to_s
+        if disk_cache.has_key?(cache_key)
+          JSON.parse(disk_cache.get(cache_key))
+        else
           resp = api.rooms_history(config[:room_id], date.to_s, CONFIG[:timezone])
           if resp.code != 200
             raise RuntimeError.new("Getting history failed (code: #{resp.code}, #{resp.body})")
           end
-          messages = resp.parsed_response['messages'].select do |message|
-            message['from']['user_id'] == user_id
+          messages = resp.parsed_response['messages']
+          if date < Date.today - 2.days
+            disk_cache.put(cache_key, messages.to_json)
           end
-          messages = messages.map { |hash| Message.new(hash) }
-          @messages[date] = messages
           messages
         end
       end
