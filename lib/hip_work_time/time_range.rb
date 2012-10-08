@@ -10,8 +10,13 @@ module HipWorkTime
     end
 
     def to_short_s
-      "#{@start_datetime.hour}:#{@start_datetime.minute} ~ #{@end_datetime.hour}:#{@end_datetime.minute}"
+      "#{'%02d' % @start_datetime.hour}:#{'%02d' % @start_datetime.minute} ~ " +
+          "#{'%02d' % @end_datetime.hour}:#{'%02d' % @end_datetime.minute}"
     end
     attr_accessor :start_datetime, :end_datetime
+
+    def seconds
+      @end_datetime.new_offset.to_time - @start_datetime.new_offset.to_time
+    end
   end
 end

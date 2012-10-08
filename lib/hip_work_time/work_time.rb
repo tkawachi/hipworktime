@@ -1,3 +1,5 @@
+require_relative 'normalizer'
+
 module HipWorkTime
   class WorkTime
     def initialize(target_date)
@@ -76,8 +78,14 @@ module HipWorkTime
       result
     end
 
+    def normalized_work_times
+      Normalizer.new(work_times).normalize
+    end
+
     def to_s
-      "#@target_date #{work_times.map { |time_range| time_range.to_short_s }}"
+      "#@target_date " +
+          "#{normalized_work_times.map { |time_range| time_range.to_short_s }}" +
+          " #{work_times.map { |time_range| time_range.to_short_s }}"
     end
 
     attr_accessor :start_datetime, :end_datetime, :break_hours
