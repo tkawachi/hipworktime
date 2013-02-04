@@ -23,7 +23,11 @@ end
 def work_time_for_date(date)
   work_time = HipWorkTime::WorkTime.new(date)
   [date, date + 1].each do |d| # 日付またいで仕事することがあるので翌日分も参照
-    work_time.add_messages(HipWorkTime::CachedApiAccess.messages(d))
+    begin
+      work_time.add_messages(HipWorkTime::CachedApiAccess.messages(d))
+    rescue
+      # ignore
+    end
   end
   work_time
 end
