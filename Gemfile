@@ -1,12 +1,12 @@
 source 'https://rubygems.org'
 
+gem 'activesupport'
 gem 'hipchat-api'
 gem 'pit'
-gem 'activesupport'
+gem 'rake', require: false
 
 group :test do
+  gem 'coveralls', require: false
   gem 'rspec'
   gem 'rr'
-  gem 'simplecov', :require => false
-  gem 'simplecov-rcov', :require => false
 end
