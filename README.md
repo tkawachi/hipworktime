@@ -2,4 +2,4 @@
 [![Dependency Status](https://gemnasium.com/tkawachi/hipworktime.png)](https://gemnasium.com/tkawachi/hipworktime)
 [![Build Status](https://travis-ci.org/tkawachi/hipworktime.png?branch=develop)](https://travis-ci.org/tkawachi/hipworktime)
 [![Code Climate](https://codeclimate.com/github/tkawachi/hipworktime.png)](https://codeclimate.com/github/tkawachi/hipworktime)
-[![Coverage Status](https://coveralls.io/repos/tkawachi/hipworktime/badge.png)](https://coveralls.io/r/tkawachi/hipworktime)
+[![Coverage Status](https://coveralls.io/repos/tkawachi/hipworktime/badge.png?branch=develop)](https://coveralls.io/r/tkawachi/hipworktime?branch=develop)
